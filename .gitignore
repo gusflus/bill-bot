@@ -6,3 +6,8 @@ credentials.json
 __pycache__/
 *.pyc
 .venv/
+
+# Personal bill-sender list and its generated Apps Script config - not
+# something that belongs in a shared/public repo. See senders.config.example.json.
+senders.config.json
+src/SendersConfig.gs

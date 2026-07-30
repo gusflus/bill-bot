@@ -61,7 +61,12 @@ Python rather than inside Apps Script.
 ```
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+cp senders.config.example.json senders.config.json
 ```
+
+`senders.config.json` and the `src/SendersConfig.gs` generated from it are
+gitignored - they're your personal bill-sender list, not something that
+belongs in a shared repo.
 
 You'll need a Google Cloud OAuth client for the wizard to read your Gmail
 (read-only) while picking a pattern - this is separate from the bot's own
