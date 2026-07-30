@@ -1,0 +1,12 @@
+{
+  "name": "bill-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Watches Gmail for utility bill emails, splits the amount among roommates, and posts the split to a notifier (Discord, Slack, SMS, ...). Bot logic runs on Google Apps Script (JS, required by the platform); the sender setup wizard and build tooling are Python.",
+  "scripts": {
+    "push": "clasp push"
+  },
+  "devDependencies": {
+    "@google/clasp": "^2.4.2"
+  }
+}
