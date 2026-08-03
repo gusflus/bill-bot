@@ -1,0 +1,10 @@
+[project]
+name = "bill-bot"
+version = "0.1.0"
+description = "Setup tooling for bill-bot: a Gmail bill watcher that splits utility bills among roommates"
+requires-python = ">=3.11"
+dependencies = [
+    "google-api-python-client>=2.140.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.0",
+]

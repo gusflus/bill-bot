@@ -6,7 +6,7 @@ and posts the split (with a Venmo request link) to a group chat.
 The bot itself runs on **Google Apps Script** - free, no server, and it uses
 Apps Script's own built-in Gmail access so it needs no OAuth setup of its own.
 The **setup wizard** (for teaching it a new sender's bill format) is a local
-Python script.
+Python script, managed with [uv](https://docs.astral.sh/uv/).
 
 ## How it works
 
@@ -56,17 +56,18 @@ prompt you to authorize the script's Gmail access - that's expected.
 ### 5. Add your bill senders
 
 This is the part that needs real sample emails, so it runs locally with
-Python rather than inside Apps Script.
+Python rather than inside Apps Script. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
+if you don't have it, then:
 
 ```
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+uv sync
 cp senders.config.example.json senders.config.json
 ```
 
-`senders.config.json` and the `src/SendersConfig.gs` generated from it are
-gitignored - they're your personal bill-sender list, not something that
-belongs in a shared repo.
+`uv sync` creates `.venv/` and installs exactly what's pinned in `uv.lock` -
+no manual venv/pip steps needed. `senders.config.json` and the
+`src/SendersConfig.gs` generated from it are gitignored - they're your
+personal bill-sender list, not something that belongs in a shared repo.
 
 You'll need a Google Cloud OAuth client for the wizard to read your Gmail
 (read-only) while picking a pattern - this is separate from the bot's own
@@ -80,7 +81,7 @@ Apps Script access:
 Then, for each utility sender:
 
 ```
-python setup/wizard.py --sender billpay.pge.com --name "PG&E"
+uv run setup/wizard.py --sender billpay.pge.com --name "PG&E"
 ```
 
 The wizard fetches a few recent emails from that address, tries a battery of
@@ -91,7 +92,7 @@ type a custom regex. It saves the result to `senders.config.json`.
 After adding a sender:
 
 ```
-python build/generate_senders_config.py   # senders.config.json -> src/SendersConfig.gs
+uv run build/generate_senders_config.py   # senders.config.json -> src/SendersConfig.gs
 npx clasp push
 ```
 
