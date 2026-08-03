@@ -1,5 +1,6 @@
-// Non-secret, version-controlled settings. Secrets (webhook URLs, API keys)
-// go in Script Properties instead - see README.md - never hardcode them here.
+// Copy this to src/Config.gs and fill in your own values.
+// src/Config.gs is gitignored - it's your household's settings, not
+// something that belongs in a shared/public repo.
 
 const Config = {
   ROOMMATE_COUNT: 6,

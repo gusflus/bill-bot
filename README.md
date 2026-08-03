@@ -24,42 +24,42 @@ Python script, managed with [uv](https://docs.astral.sh/uv/).
 
 ### 1. Create the Apps Script project
 
-```
+```bash
 npm install          # installs clasp, the Apps Script CLI
 npx clasp login
 npx clasp create --title "bill-bot" --type standalone --rootDir src
 cp .clasp.json.example .clasp.json   # then paste the scriptId clasp just gave you
-npx clasp push
 ```
+
+Don't `clasp push` yet - `src/Config.gs` and `src/SendersConfig.gs` don't
+exist locally until steps 3 and 4, and `Main.gs` needs both to run.
 
 ### 2. Configure secrets
 
 In the Apps Script editor (`npx clasp open`) → Project Settings → Script
 Properties, add:
 
-| Property | Value |
-|---|---|
+| Property              | Value                                                              |
+| --------------------- | ------------------------------------------------------------------ |
 | `DISCORD_WEBHOOK_URL` | A Discord webhook URL (Channel Settings → Integrations → Webhooks) |
 
 ### 3. Configure `src/Config.gs`
 
+```bash
+cp src/Config.example.gs src/Config.gs
+```
+
 Set `ROOMMATE_COUNT` and `VENMO_USERNAME` (your own Venmo @handle - it's who
-gets paid). Both are safe to commit; they're not secrets.
+gets paid). `src/Config.gs` is gitignored - it's your household's settings,
+not something that belongs in a shared repo.
 
-### 4. Install the trigger
-
-In the Apps Script editor, run `setupTrigger` once (select it from the
-function dropdown, click Run). This installs the recurring 30-minute trigger
-that calls `processNewBills`. The first time you run anything, Google will
-prompt you to authorize the script's Gmail access - that's expected.
-
-### 5. Add your bill senders
+### 4. Add your bill senders
 
 This is the part that needs real sample emails, so it runs locally with
 Python rather than inside Apps Script. Install [uv](https://docs.astral.sh/uv/getting-started/installation/)
 if you don't have it, then:
 
-```
+```bash
 uv sync
 cp senders.config.example.json senders.config.json
 ```
@@ -77,10 +77,14 @@ Apps Script access:
    project (or reuse one), enable the **Gmail API**, and create an OAuth
    client ID of type **Desktop app**.
 2. Download it as `credentials.json` into the repo root.
+3. On the [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent),
+   add your own Google account under **Test users**. New OAuth consent
+   screens default to "Testing" status, where only explicitly-added test
+   users can complete the login
 
 Then, for each utility sender:
 
-```
+```bash
 uv run setup/wizard.py --sender billpay.pge.com --name "PG&E"
 ```
 
@@ -91,10 +95,20 @@ type a custom regex. It saves the result to `senders.config.json`.
 
 After adding a sender:
 
-```
+```bash
 uv run build/generate_senders_config.py   # senders.config.json -> src/SendersConfig.gs
+```
+
+### 5. Push and install the trigger
+
+```bash
 npx clasp push
 ```
+
+In the Apps Script editor, run `setupTrigger` once (select it from the
+function dropdown, click Run). This installs the recurring 30-minute trigger
+that calls `processNewBills`. The first time you run anything, Google will
+prompt you to authorize the script's Gmail access - that's expected.
 
 ### 6. Test it
 

@@ -11,3 +11,4 @@ __pycache__/
 # something that belongs in a shared/public repo. See senders.config.example.json.
 senders.config.json
 src/SendersConfig.gs
+src/Config.gs
