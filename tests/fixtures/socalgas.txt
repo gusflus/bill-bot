@@ -1,0 +1,23 @@
+SoCalGas: Your bill is ready to view
+
+Dear Customer,
+
+Your SoCalGas bill for account 0123 4567 8901 is now available.
+
+Service period: 07/18/2026 - 08/17/2026
+Billing days: 30
+Meter number: 4471882
+
+Usage this period: 18 therms
+Usage same period last year: 22 therms
+
+Charges
+  Previous balance                    0.00
+  Payment received 07/22/2026        -61.44
+  Customer charge                     16.40
+  Baseline usage 12 therms            14.88
+  Over-baseline usage 6 therms         9.72
+  State regulatory fee                 0.11
+  Public purpose surcharge             2.94
+
+Amount due by September 11, 2026: $44.05

@@ -1,0 +1,14 @@
+Statement notification - account 5591
+
+Previous balance from last statement: $310.00
+Payments received since last statement: -$310.00
+
+Current charges for this period
+  Base service                            58.00
+  Usage charges                           21.19
+  Taxes and fees                           6.31
+
+Amount due this period: $85.50
+Due date: 09/15/2026
+
+If you have already scheduled a payment, no action is needed.

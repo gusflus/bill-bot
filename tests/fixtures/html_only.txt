@@ -1,0 +1,11 @@
+<html><head><style>.total{font-weight:bold}</style></head><body>
+<p>Having trouble viewing this email? <a href="https://example.com/view">View it in your browser</a>.</p>
+<table>
+<tr><td>Account</td><td>7742-B</td></tr>
+<tr><td>Statement date</td><td>August 20, 2026</td></tr>
+<tr><td>Amount Due</td><td class="total">$67.20</td></tr>
+<tr><td>Due Date</td><td>September 10, 2026</td></tr>
+</table>
+<p>Thank you for being a customer. Pay online anytime.</p>
+<script>trackOpen('7742B');</script>
+</body></html>
