@@ -1,14 +1,24 @@
 node_modules/
 .clasp.json
-.setup-token.json
-credentials.json
 *.log
 __pycache__/
 *.pyc
 .venv/
+.pytest_cache/
+.DS_Store
 
-# Personal bill-sender list and its generated Apps Script config - not
-# something that belongs in a shared/public repo. See senders.config.example.json.
-senders.config.json
-src/SendersConfig.gs
-src/Config.gs
+# CDK build output
+cdk.out/
+.cdk.staging/
+cdk.context.json
+outputs.json
+
+# Your household's settings - phone numbers, Venmo handle, bill senders.
+# See config.example.yaml.
+config.yaml
+
+# Legacy: the Google Cloud OAuth client and token the retired setup wizard
+# needed. Nothing reads these any more. Still ignored so they can't be committed
+# before you delete them - see "If you used an earlier version" in the README.
+credentials.json
+.setup-token.json
