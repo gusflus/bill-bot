@@ -1,8 +1,0 @@
-[
-  {
-    "name": "Example Utility Co",
-    "fromAddress": "billing@example.com",
-    "matchType": "regex",
-    "regexSource": "Total\\s+Amount\\s+Due[:\\s]*\\$?([\\d,]+\\.\\d{2})"
-  }
-]
