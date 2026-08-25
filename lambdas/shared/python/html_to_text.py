@@ -1,7 +1,8 @@
-"""Minimal HTML -> plaintext, good enough for regex matching against bill emails.
+"""Minimal HTML -> plaintext, good enough for bill-amount extraction.
 
-Deliberately duplicated (it's ~10 lines) as a small JS function in src/Parser.gs,
-since Apps Script can't import this Python module.
+A fallback only: Apps Script sends ``getPlainBody()``, which is already
+plaintext for the overwhelming majority of bill emails. This handles the
+senders whose plaintext part is empty or is just "view this in a browser".
 """
 import re
 
@@ -30,4 +31,6 @@ def html_to_text(html: str) -> str:
         text = text.replace(entity, replacement)
     text = _SPACES_RE.sub(" ", text)
     text = _BLANK_LINES_RE.sub("\n", text)
-    return text.strip()
+    # Strip per line: replacing tags with spaces otherwise leaves every line
+    # indented, which wastes prompt tokens and makes logs harder to read.
+    return "\n".join(line.strip() for line in text.split("\n")).strip()
