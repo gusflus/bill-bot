@@ -49,3 +49,32 @@ test("buildSplit with payee.share 0 gives the payer nothing and roommates the wh
   const rowSum = result.rows.reduce((sum, r) => sum + r.amountCents, 0);
   assert.equal(rowSum, 5000);
 });
+
+test("buildSplit equalizes equal-share roommates to the higher cent amount", () => {
+  // 4-way split (3 roommates + payee, all share 1) of $10.01 doesn't divide evenly -
+  // largest-remainder would otherwise leave one roommate a cent below the others.
+  const roommates = [
+    { label: "Sam", share: 1 },
+    { label: "Alex", share: 1 },
+    { label: "Jo", share: 1 },
+  ];
+  const result = buildSplit(1, roommates, 1001);
+  const amounts = result.rows.map((r) => r.amountCents);
+  assert.deepEqual(amounts, [251, 251, 251]);
+  // Every roommate gets at least their fair share; the payee absorbs the shortfall
+  // that creates, so nobody but the payee is ever left short.
+  const rowSum = amounts.reduce((a, b) => a + b, 0);
+  assert.ok(rowSum + result.payerAmountCents >= 1001);
+});
+
+test("buildSplit leaves an uneven share distinct, but equalizes within each share group", () => {
+  const roommates = [
+    { label: "Sam", share: 1 },
+    { label: "Alex", share: 2 }, // master bedroom - legitimately owes more
+    { label: "Jo", share: 1 },
+  ];
+  const result = buildSplit(0, roommates, 1002);
+  const byLabel = Object.fromEntries(result.rows.map((r) => [r.label, r.amountCents]));
+  assert.equal(byLabel.Sam, byLabel.Jo); // same share weight -> same amount
+  assert.ok(byLabel.Alex > byLabel.Sam); // double share -> still pays more
+});

@@ -85,12 +85,21 @@ function main() {
   console.log(`total accounted for : ${((rowSum + split.payerAmountCents) / 100).toFixed(2)}   (bill was ${(amountCents / 100).toFixed(2)})`);
   console.log("");
 
-  if (rowSum + split.payerAmountCents !== amountCents) {
-    console.error("MISMATCH - shares plus payer amount do not reconcile to the bill total.");
+  const accounted = rowSum + split.payerAmountCents;
+  if (accounted < amountCents) {
+    console.error("MISMATCH - shares plus payer amount fall short of the bill total.");
     process.exit(1);
   }
 
-  console.log("OK - every roommate has a link, and the amounts reconcile to the bill total.");
+  if (accounted > amountCents) {
+    console.log(
+      `OK - every roommate has a link. Equal-share roommates are bumped up to the ` +
+        `same cent amount, so this run overcollects by ${formatCents(accounted - amountCents)} ` +
+        `(the payee keeps the difference) rather than leaving anyone a cent short.`
+    );
+  } else {
+    console.log("OK - every roommate has a link, and the amounts reconcile to the bill total exactly.");
+  }
 }
 
 main();

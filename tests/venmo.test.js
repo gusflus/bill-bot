@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildPayLink } = require("../src/lib/venmo.js");
+const { buildPayLink, buildGenericPayLink } = require("../src/lib/venmo.js");
 
 test("buildPayLink always targets the payee, regardless of who opens it", () => {
   const link = buildPayLink("gus-flusser", 4405, "PG&E split 08-2026");
@@ -17,4 +17,16 @@ test("buildPayLink URL-encodes the note", () => {
 
 test("buildPayLink requires a payee username", () => {
   assert.throws(() => buildPayLink("", 100, "note"));
+});
+
+test("buildGenericPayLink has no amount, so it's identical for every roommate", () => {
+  const link = buildGenericPayLink("gus-flusser", "Spectrum split 08-2026");
+  assert.match(link, /^https:\/\/venmo\.com\/\?/);
+  assert.match(link, /txn=pay/);
+  assert.match(link, /recipients=gus-flusser/);
+  assert.doesNotMatch(link, /amount=/);
+});
+
+test("buildGenericPayLink requires a payee username", () => {
+  assert.throws(() => buildGenericPayLink("", "note"));
 });

@@ -46,27 +46,43 @@ function allocateCents(totalCents, weights) {
 // Splits totalCents across roommates (list of { label, share }), with the payee's
 // own share appended to the same allocation so everyone's cents come from one
 // largest-remainder pass. The payee's resulting amount is never a payable row - it's
-// what they absorb, returned separately as payerAmountCents so
-// sum(rows) + payerAmountCents === totalCents exactly.
+// what they absorb, returned separately as payerAmountCents.
+//
+// Largest-remainder allocation can leave two roommates on the identical share weight
+// a cent apart (e.g. $11.67 vs $11.66), which reads as a mistake even though it
+// reconciles exactly. So within each group of roommates who share the same weight,
+// everyone is bumped up to the group's largest allocated cent amount - a roommate
+// never pays less than their fair share, at most a cent or two more, and the payee
+// simply ends up with the tiny overage. Roommates on a different weight (an uneven
+// split) are unaffected and still legitimately owe a different amount.
 function buildSplit(payeeShare, roommates, totalCents) {
   var weights = roommates.map(function (r) {
     return r.share;
   });
 
+  var payerAmountCents = 0;
+  var roommateAmounts;
+
   if (payeeShare > 0) {
     var parts = allocateCents(totalCents, weights.concat([payeeShare]));
-    var payerAmountCents = parts[parts.length - 1];
-    var rows = roommates.map(function (r, i) {
-      return { label: r.label, amountCents: parts[i] };
-    });
-    return { rows: rows, payerAmountCents: payerAmountCents };
+    payerAmountCents = parts[parts.length - 1];
+    roommateAmounts = parts.slice(0, parts.length - 1);
+  } else {
+    roommateAmounts = allocateCents(totalCents, weights);
   }
 
-  var partsNoPayee = allocateCents(totalCents, weights);
-  var rowsNoPayee = roommates.map(function (r, i) {
-    return { label: r.label, amountCents: partsNoPayee[i] };
+  var maxByShare = {};
+  roommates.forEach(function (r, i) {
+    if (maxByShare[r.share] === undefined || roommateAmounts[i] > maxByShare[r.share]) {
+      maxByShare[r.share] = roommateAmounts[i];
+    }
   });
-  return { rows: rowsNoPayee, payerAmountCents: 0 };
+
+  var rows = roommates.map(function (r) {
+    return { label: r.label, amountCents: maxByShare[r.share] };
+  });
+
+  return { rows: rows, payerAmountCents: payerAmountCents };
 }
 
 if (typeof module !== "undefined") {
