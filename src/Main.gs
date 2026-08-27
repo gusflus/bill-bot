@@ -130,13 +130,11 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
   // Google's own APIs. If it fails, bail out with nothing written or labeled, so the
   // next scheduled run retries this thread from scratch rather than silently missing
   // the notification for an already-recorded bill.
-  var genericVenmoLink = buildGenericPayLink(CONFIG.payee.venmoUsername, note);
   var discordOk = postDiscordNotification_(
     sender.name,
     monthLabel,
     formatCents_(extraction.amountCents),
     rows,
-    genericVenmoLink,
     extraction.confidence,
   );
   if (!discordOk) {

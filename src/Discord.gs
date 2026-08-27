@@ -16,7 +16,6 @@ function postDiscordNotification_(
   monthLabel,
   totalFormatted,
   rows,
-  genericVenmoLink,
   confidence
 ) {
   var webhookUrl =
@@ -30,29 +29,30 @@ function postDiscordNotification_(
     return true;
   }
 
-  // One "Share" field per distinct amount - just one in the common case where every
-  // roommate owes the same amount, but this still shows each amount separately if an
-  // uneven share weight ever makes roommates owe different amounts.
+  // One "Share" field per distinct amount, each with its own pre-filled Venmo link -
+  // just one field in the common case where every roommate owes the same amount, but
+  // this still shows each amount (and its own correct link) separately if an uneven
+  // share weight ever makes roommates owe different amounts. Every row in a group has
+  // an identical venmoLink already (same amount + same note), so the first is reused.
   var uniqueAmounts = [];
   rows.forEach(function (row) {
     if (uniqueAmounts.indexOf(row.amountCents) === -1) {
       uniqueAmounts.push(row.amountCents);
     }
   });
-  var shareFields =
-    uniqueAmounts.length === 1
-      ? [{ name: "Share", value: formatCents_(uniqueAmounts[0]) + " each", inline: true }]
-      : uniqueAmounts.map(function (amount) {
-          var labels = rows
-            .filter(function (row) {
-              return row.amountCents === amount;
-            })
-            .map(function (row) {
-              return row.label;
-            })
-            .join(", ");
-          return { name: "Share (" + labels + ")", value: formatCents_(amount), inline: true };
-        });
+  var shareFields = uniqueAmounts.map(function (amount) {
+    var matching = rows.filter(function (row) {
+      return row.amountCents === amount;
+    });
+    var name = uniqueAmounts.length === 1 ? "Share" : "Share (" + matching.map(function (row) {
+      return row.label;
+    }).join(", ") + ")";
+    return {
+      name: name,
+      value: formatCents_(amount) + " — [Pay on Venmo](" + matching[0].venmoLink + ")",
+      inline: true,
+    };
+  });
 
   var embed = {
     title: billerName + " bill split",
@@ -62,10 +62,7 @@ function postDiscordNotification_(
       { name: "Month", value: monthLabel, inline: true },
     ]
       .concat(shareFields)
-      .concat([
-        { name: "Venmo", value: "[Pay " + CONFIG.payee.label + "](" + genericVenmoLink + ")" },
-        { name: "Ledger", value: "[Open the sheet](" + ledgerSheetUrl_() + ")" },
-      ]),
+      .concat([{ name: "Ledger", value: "[Open the sheet](" + ledgerSheetUrl_() + ")" }]),
     footer: {
       text: confidence === "low" ? "Low confidence - double check the amount" : "bill-bot",
     },
