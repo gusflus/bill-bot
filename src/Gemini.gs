@@ -1,5 +1,16 @@
 // Fallback extraction when no regex keyphrase matches. Only called for senders whose
 // bill format the regex patterns in lib/extractRegex.js don't recognize.
+//
+// Returns a positive number of cents on success, null if the failure is permanent
+// (bad API key, malformed response - retrying won't help, so the caller should flag
+// the thread for a human), or undefined if the failure looks transient (Gemini
+// overloaded, a network blip - the caller should leave the thread unlabeled instead,
+// so the next scheduled run just tries again automatically).
+
+// HTTP codes worth a short in-run retry before giving up as transient.
+var GEMINI_RETRYABLE_CODES = [429, 500, 502, 503, 504];
+var GEMINI_MAX_ATTEMPTS = 3;
+var GEMINI_RETRY_DELAYS_MS = [2000, 5000]; // between attempts 1->2 and 2->3
 
 function callGeminiForAmount_(text) {
   var apiKey =
@@ -43,26 +54,57 @@ function callGeminiForAmount_(text) {
     },
   };
 
-  var response;
-  try {
-    response = UrlFetchApp.fetch(url, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true,
-    });
-  } catch (e) {
-    Logger.log("Gemini request failed: %s", e);
-    return null;
-  }
+  var response = null;
+  var transientFailure = false;
 
-  if (response.getResponseCode() !== 200) {
+  for (var attempt = 0; attempt < GEMINI_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      Utilities.sleep(GEMINI_RETRY_DELAYS_MS[attempt - 1]);
+    }
+
+    try {
+      response = UrlFetchApp.fetch(url, {
+        method: "post",
+        contentType: "application/json",
+        payload: JSON.stringify(payload),
+        muteHttpExceptions: true,
+      });
+    } catch (e) {
+      // A thrown exception from UrlFetchApp itself (DNS/connection failure) is
+      // always transient - never the email's fault.
+      Logger.log(
+        "Gemini request failed (attempt %s/%s): %s",
+        attempt + 1,
+        GEMINI_MAX_ATTEMPTS,
+        e,
+      );
+      transientFailure = true;
+      response = null;
+      continue;
+    }
+
+    var code = response.getResponseCode();
+    if (code === 200) {
+      transientFailure = false;
+      break;
+    }
+
+    transientFailure = GEMINI_RETRYABLE_CODES.indexOf(code) !== -1;
     Logger.log(
-      "Gemini returned HTTP %s: %s",
-      response.getResponseCode(),
+      "Gemini returned HTTP %s (attempt %s/%s): %s",
+      code,
+      attempt + 1,
+      GEMINI_MAX_ATTEMPTS,
       response.getContentText(),
     );
-    return null;
+    if (!transientFailure) {
+      // A 4xx other than 429 (bad API key, bad request) won't fix itself by retrying.
+      return null;
+    }
+  }
+
+  if (!response || response.getResponseCode() !== 200) {
+    return transientFailure ? undefined : null;
   }
 
   try {

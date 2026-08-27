@@ -20,7 +20,7 @@ function processNewBills() {
   var processedLabel = getOrCreateLabel_(CONFIG.behavior.processedLabel);
   var errorLabel = getOrCreateLabel_(CONFIG.behavior.errorLabel);
   var lookback = lookbackDays_();
-  var stats = { processed: 0, duplicate: 0, ignored: 0, errored: 0 };
+  var stats = { processed: 0, duplicate: 0, ignored: 0, errored: 0, retryLater: 0 };
 
   CONFIG.senders.forEach(function (sender) {
     var query = "from:" + sender.fromAddress + " newer_than:" + lookback + "d";
@@ -38,11 +38,12 @@ function processNewBills() {
   });
 
   Logger.log(
-    "Done. processed=%s duplicate=%s ignored=%s errored=%s",
+    "Done. processed=%s duplicate=%s ignored=%s errored=%s retryLater=%s",
     stats.processed,
     stats.duplicate,
     stats.ignored,
     stats.errored,
+    stats.retryLater,
   );
 }
 
@@ -72,7 +73,18 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
   }
 
   var extraction = extractAmount_(subject, bodyText);
-  if (!extraction) {
+  if (extraction === undefined) {
+    // Transient failure (Gemini overloaded, a network blip) - leave unlabeled so the
+    // next scheduled run just tries again automatically, no manual step needed.
+    Logger.log(
+      "Temporary failure extracting an amount for %s (thread %s) - will retry next run",
+      sender.name,
+      thread.getId(),
+    );
+    stats.retryLater++;
+    return;
+  }
+  if (extraction === null) {
     thread.addLabel(errorLabel);
     Logger.log(
       "Could not extract an amount for %s (thread %s)",
@@ -113,9 +125,13 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
     };
   });
 
-  appendLedgerRows_(rows);
+  // Discord goes out before anything is recorded: it's an extra hop through
+  // Cloudflare and more prone to a transient failure than Gmail/Sheets calls to
+  // Google's own APIs. If it fails, bail out with nothing written or labeled, so the
+  // next scheduled run retries this thread from scratch rather than silently missing
+  // the notification for an already-recorded bill.
   var genericVenmoLink = buildGenericPayLink(CONFIG.payee.venmoUsername, note);
-  postDiscordNotification_(
+  var discordOk = postDiscordNotification_(
     sender.name,
     monthLabel,
     formatCents_(extraction.amountCents),
@@ -123,7 +139,17 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
     genericVenmoLink,
     extraction.confidence,
   );
+  if (!discordOk) {
+    Logger.log(
+      "Discord notification failed for %s (thread %s) - will retry next run",
+      sender.name,
+      thread.getId(),
+    );
+    stats.retryLater++;
+    return;
+  }
 
+  appendLedgerRows_(rows);
   thread.addLabel(processedLabel);
   thread.moveToTrash();
   stats.processed++;
@@ -132,6 +158,10 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
 // Regex keyphrase match first; Gemini only runs when that fails. Biller name and
 // month don't need Gemini - biller comes from the sender config that matched, month
 // comes from when the email arrived.
+//
+// Returns { amountCents, confidence } on success, null if extraction has genuinely
+// failed (flag for a human), or undefined if Gemini's failure looks transient (leave
+// the thread alone, it'll be retried automatically next scheduled run).
 function extractAmount_(subject, bodyText) {
   var text = subject + "\n" + bodyText;
 
@@ -141,6 +171,9 @@ function extractAmount_(subject, bodyText) {
   }
 
   var geminiAmountCents = callGeminiForAmount_(text);
+  if (geminiAmountCents === undefined) {
+    return undefined;
+  }
   if (geminiAmountCents === null) {
     return null;
   }

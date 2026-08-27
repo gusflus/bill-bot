@@ -1,5 +1,15 @@
 // Plain incoming webhook - a notification only. No bot, no reactions, no message
-// editing. The Ledger sheet (Ledger.gs) is the source of truth for who's paid.
+// editing. Called *before* the ledger row/label/trash - Discord (an extra hop through
+// Cloudflare) is more likely to hiccup than Gmail/Sheets calls to Google's own APIs,
+// so a failure here should hold up recording the bill at all, not just the ping. The
+// caller retries the whole thread next scheduled run if this returns false.
+//
+// Returns true if it's safe to proceed (message sent, or no webhook configured at
+// all - that's a deliberate choice, not a failure, and must never block bills from
+// being recorded). Returns false only when a webhook IS configured but every attempt
+// to reach it failed.
+var DISCORD_MAX_ATTEMPTS = 2;
+var DISCORD_RETRY_DELAY_MS = 4000;
 
 function postDiscordNotification_(
   billerName,
@@ -17,7 +27,7 @@ function postDiscordNotification_(
       "No Discord webhook URL set (CONFIG.secrets.discordWebhookUrl or " +
         "DISCORD_WEBHOOK_URL Script Property); skipping Discord notification."
     );
-    return;
+    return true;
   }
 
   // One "Share" field per distinct amount - just one in the common case where every
@@ -61,25 +71,44 @@ function postDiscordNotification_(
     },
   };
 
-  var response;
-  try {
-    response = UrlFetchApp.fetch(webhookUrl, {
-      method: "post",
-      contentType: "application/json",
-      payload: JSON.stringify({ embeds: [embed] }),
-      muteHttpExceptions: true,
-    });
-  } catch (e) {
-    Logger.log("Discord webhook request failed: %s", e);
-    return;
-  }
+  var payload = JSON.stringify({ embeds: [embed] });
 
-  var code = response.getResponseCode();
-  if (code < 200 || code >= 300) {
+  for (var attempt = 0; attempt < DISCORD_MAX_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      Utilities.sleep(DISCORD_RETRY_DELAY_MS);
+    }
+
+    var response;
+    try {
+      response = UrlFetchApp.fetch(webhookUrl, {
+        method: "post",
+        contentType: "application/json",
+        payload: payload,
+        muteHttpExceptions: true,
+      });
+    } catch (e) {
+      Logger.log(
+        "Discord webhook request failed (attempt %s/%s): %s",
+        attempt + 1,
+        DISCORD_MAX_ATTEMPTS,
+        e
+      );
+      continue;
+    }
+
+    var code = response.getResponseCode();
+    if (code >= 200 && code < 300) {
+      return true;
+    }
+
     Logger.log(
-      "Discord webhook returned HTTP %s: %s",
+      "Discord webhook returned HTTP %s (attempt %s/%s): %s",
       code,
+      attempt + 1,
+      DISCORD_MAX_ATTEMPTS,
       response.getContentText()
     );
   }
+
+  return false;
 }
