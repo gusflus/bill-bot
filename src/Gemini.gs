@@ -2,9 +2,14 @@
 // bill format the regex patterns in lib/extractRegex.js don't recognize.
 
 function callGeminiForAmount_(text) {
-  var apiKey = PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
+  var apiKey =
+    (CONFIG.secrets && CONFIG.secrets.geminiApiKey) ||
+    PropertiesService.getScriptProperties().getProperty("GEMINI_API_KEY");
   if (!apiKey) {
-    Logger.log("GEMINI_API_KEY is not set; cannot fall back to Gemini extraction.");
+    Logger.log(
+      "No Gemini API key set (CONFIG.secrets.geminiApiKey or GEMINI_API_KEY " +
+        "Script Property); cannot fall back to Gemini extraction."
+    );
     return null;
   }
 

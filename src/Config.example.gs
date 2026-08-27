@@ -1,12 +1,19 @@
 // Copy this file to Config.gs and edit it. Config.gs is gitignored - it holds your
-// household's Venmo handle and roommate list. `clasp push` sends whichever one
-// actually exists in this directory.
-//
-// Secrets (GEMINI_API_KEY, DISCORD_WEBHOOK_URL) do NOT go here - set them as Script
-// Properties instead (Project Settings -> Script Properties in the Apps Script
-// editor), so they never end up in source control even by accident. See README.
+// household's Venmo handle, roommate list, and secrets. `clasp push` sends whichever
+// one actually exists in this directory.
 
 var CONFIG = {
+  // Gemini API key (https://aistudio.google.com/apikey) and Discord webhook URL
+  // (Server Settings -> Integrations -> Webhooks -> New Webhook). Kept here instead
+  // of Script Properties for a one-file setup - safe as long as you never paste this
+  // file's contents somewhere public, since Config.gs is gitignored either way. Set a
+  // spend/usage cap on the Gemini key in AI Studio regardless. Leave a value blank to
+  // fall back to a GEMINI_API_KEY / DISCORD_WEBHOOK_URL Script Property instead.
+  secrets: {
+    geminiApiKey: "",
+    discordWebhookUrl: "",
+  },
+
   // Used to format bill months and label the Ledger sheet's timestamps.
   timezone: "America/Los_Angeles",
 
@@ -25,7 +32,7 @@ var CONFIG = {
     venmoUsername: "your-venmo-handle",
 
     // Your name, used on the Ledger sheet and in the Discord notification.
-    label: "Gus",
+    label: "Your name",
 
     // Your share of each bill, on the same relative scale as the roommates below.
     // Set 0 if you don't take a share and the roommates cover the whole bill.
@@ -52,8 +59,6 @@ var CONFIG = {
   // domain works and catches every address at that domain.
   senders: [
     { name: "PG&E", fromAddress: "billpay.pge.com" },
-    { name: "SoCalGas", fromAddress: "socalgas.com" },
-    { name: "WaterSewer", fromAddress: "merchanttransact.com" },
     { name: "Spectrum", fromAddress: "spectrumemails.com" },
   ],
 

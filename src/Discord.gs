@@ -2,9 +2,14 @@
 // editing. The Ledger sheet (Ledger.gs) is the source of truth for who's paid.
 
 function postDiscordNotification_(billerName, monthLabel, totalFormatted, rows, confidence) {
-  var webhookUrl = PropertiesService.getScriptProperties().getProperty("DISCORD_WEBHOOK_URL");
+  var webhookUrl =
+    (CONFIG.secrets && CONFIG.secrets.discordWebhookUrl) ||
+    PropertiesService.getScriptProperties().getProperty("DISCORD_WEBHOOK_URL");
   if (!webhookUrl) {
-    Logger.log("DISCORD_WEBHOOK_URL is not set; skipping Discord notification.");
+    Logger.log(
+      "No Discord webhook URL set (CONFIG.secrets.discordWebhookUrl or " +
+        "DISCORD_WEBHOOK_URL Script Property); skipping Discord notification."
+    );
     return;
   }
 

@@ -178,7 +178,7 @@ function setupTrigger() {
 
 /**
  * Check the config and secrets without touching Gmail. Run this first after
- * pushing: it proves Config.gs and the Script Properties are set correctly.
+ * pushing: it proves Config.gs is set up correctly.
  */
 function testConnection() {
   Logger.log("Payee: %s (share %s, Venmo @%s)",
@@ -189,8 +189,14 @@ function testConnection() {
   Logger.log("Senders: %s", CONFIG.senders.map(function (s) { return s.name; }).join(", "));
 
   var props = PropertiesService.getScriptProperties();
-  ["GEMINI_API_KEY", "DISCORD_WEBHOOK_URL"].forEach(function (name) {
-    Logger.log("%s: %s", name, props.getProperty(name) ? "set" : "MISSING");
+  var secretSources = {
+    "Gemini API key": (CONFIG.secrets && CONFIG.secrets.geminiApiKey) ? "Config.gs" :
+      (props.getProperty("GEMINI_API_KEY") ? "Script Property" : null),
+    "Discord webhook URL": (CONFIG.secrets && CONFIG.secrets.discordWebhookUrl) ? "Config.gs" :
+      (props.getProperty("DISCORD_WEBHOOK_URL") ? "Script Property" : null),
+  };
+  Object.keys(secretSources).forEach(function (name) {
+    Logger.log("%s: %s", name, secretSources[name] || "MISSING");
   });
 }
 
