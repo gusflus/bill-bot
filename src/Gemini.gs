@@ -24,8 +24,12 @@ function callGeminiForAmount_(text) {
     return null;
   }
 
+  // flash-lite, not flash: this is a small structured-extraction task (read one
+  // email, return one number), and the lite tier's free daily quota is dramatically
+  // higher - gemini-3.6-flash's free tier caps at 20 requests/day *total*, which a
+  // single testing session (each failed extraction retries 3x) can exhaust outright.
   var url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" +
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=" +
     encodeURIComponent(apiKey);
 
   var payload = {

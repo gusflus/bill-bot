@@ -2,7 +2,7 @@
  * bill-bot - a single self-contained Google Apps Script project.
  *
  * Scans Gmail for configured bill senders, extracts the total (regex keyphrase
- * match first, Gemini 3.6 Flash as a fallback for senders regex doesn't recognize),
+ * match first, Gemini 2.5 Flash-Lite as a fallback for senders regex doesn't recognize),
  * splits it by configured share weight, records the split in a Google Sheet ledger
  * (which also serves as the dedup record), posts a Discord notification, and trashes
  * the thread.
