@@ -45,11 +45,3 @@ Watches Gmail for utility bill emails and automatically splits them among your r
 
 5. **Activate**
    Run `setupTrigger` in the Apps Script editor (click on the `Main.gs` file, at the top select `setupTrigger.gs` from the dropdown next to the `Debug` button, then click `Run`) to start the 30-minute scan. The script creates a ledger sheet on its first run. Once the popup appears, click "Review Permissions" and authorize the script to access your Gmail and Drive. If you get a "Google hasn’t verified this app" warning, click "Advanced" → "Go to bill-bot (unsafe)" to proceed. Then select all the permissions and click "Allow".
-
-## Development
-
-```bash
-npm test                                               # run tests
-node dev/preview.js <fixture> --biller X --subject Y  # offline extraction check
-npx clasp push                                         # deploy to Apps Script
-```
