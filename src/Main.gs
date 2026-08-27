@@ -1,50 +1,36 @@
 /**
- * The Gmail watcher. This is all that runs on Apps Script now.
+ * bill-bot - a single self-contained Google Apps Script project.
  *
- * Search the senders the Lambda tells us about, forward matching emails, and
- * label the thread according to what the Lambda said. No parsing, no amounts,
- * no splitting, no payment links - all of that moved to AWS, where it can be
- * tested.
+ * Scans Gmail for configured bill senders, extracts the total (regex keyphrase
+ * match first, Gemini 2.5 Flash as a fallback for senders regex doesn't recognize),
+ * splits it by configured share weight, records the split in a Google Sheet ledger
+ * (which also serves as the dedup record), posts a Discord notification, and trashes
+ * the thread.
  *
- * Labelling is driven by response class, and the distinction matters:
- *
- *   2xx  handled (notified, ignored, duplicate)  -> Processed
- *   4xx  will never succeed (unknown sender)     -> Error
- *   5xx  might succeed later (Bedrock throttled) -> leave unlabeled, retry
- *
- * Leaving a 5xx thread unlabeled is the important case: the next run picks it
- * up again, so a transient outage delays a bill instead of losing it.
- *
- * Run setupTrigger() once from the editor to install the recurring trigger.
+ * Setup: copy Config.example.gs to Config.gs and edit it, set GEMINI_API_KEY and
+ * DISCORD_WEBHOOK_URL as Script Properties, run testConnection, then scanInbox, then
+ * setupTrigger once. See README.md.
  */
 
-var TRIGGER_HANDLER = 'processNewBills';
+var TRIGGER_HANDLER = "processNewBills";
 var TRIGGER_MINUTES = 30;
-
-// Kept in step with behavior.lookback_days and the label names in config.yaml.
-// Duplicated here because Apps Script can't read the YAML; the README says to
-// change both.
-var LOOKBACK_DAYS = 14;
-var PROCESSED_LABEL = 'Bill-Bot/Processed';
-var ERROR_LABEL = 'Bill-Bot/Error';
+var DEFAULT_LOOKBACK_DAYS = 14;
 
 function processNewBills() {
-  var senders = fetchSenders();
-  if (!senders.length) {
-    Logger.log('No senders configured. Add some to config.yaml and cdk deploy.');
-    return;
-  }
+  var processedLabel = getOrCreateLabel_(CONFIG.behavior.processedLabel);
+  var errorLabel = getOrCreateLabel_(CONFIG.behavior.errorLabel);
+  var lookback = lookbackDays_();
+  var stats = { processed: 0, duplicate: 0, ignored: 0, errored: 0 };
 
-  var processedLabel = getOrCreateLabel_(PROCESSED_LABEL);
-  var errorLabel = getOrCreateLabel_(ERROR_LABEL);
-  var stats = { forwarded: 0, skipped: 0, errored: 0, retryLater: 0 };
+  CONFIG.senders.forEach(function (sender) {
+    var query = "from:" + sender.fromAddress + " newer_than:" + lookback + "d";
+    var threads = GmailApp.search(query);
 
-  senders.forEach(function (sender) {
-    var query =
-      'from:' + sender.fromAddress + ' newer_than:' + LOOKBACK_DAYS + 'd';
-
-    GmailApp.search(query).forEach(function (thread) {
-      if (hasLabel_(thread, PROCESSED_LABEL) || hasLabel_(thread, ERROR_LABEL)) {
+    threads.forEach(function (thread) {
+      if (
+        hasLabel_(thread, processedLabel.getName()) ||
+        hasLabel_(thread, errorLabel.getName())
+      ) {
         return;
       }
       handleThread_(thread, sender, processedLabel, errorLabel, stats);
@@ -52,72 +38,117 @@ function processNewBills() {
   });
 
   Logger.log(
-    'Done. forwarded=%s skipped=%s errored=%s retryLater=%s',
-    stats.forwarded,
-    stats.skipped,
-    stats.errored,
-    stats.retryLater
+    "Done. processed=%s duplicate=%s ignored=%s errored=%s",
+    stats.processed,
+    stats.duplicate,
+    stats.ignored,
+    stats.errored
   );
 }
 
 function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
   var messages = thread.getMessages();
   var message = messages[messages.length - 1];
+  var subject = message.getSubject();
+  var bodyText = message.getPlainBody();
+  var receivedAt = message.getDate();
 
-  var payload = {
-    messageId: message.getId(),
-    threadId: thread.getId(),
-    from: message.getFrom(),
-    subject: message.getSubject(),
-    receivedAt: message.getDate().toISOString(),
-    bodyText: message.getPlainBody(),
-  };
-
-  var response;
-  try {
-    response = postBill(payload);
-  } catch (err) {
-    // A network failure or a missing Script Property. Treat as retryable and
-    // leave the thread alone.
-    Logger.log('Request failed for %s: %s', sender.name, err.message);
-    stats.retryLater++;
-    return;
-  }
-
-  var code = response.getResponseCode();
-  var body = response.getContentText();
-
-  if (code >= 200 && code < 300) {
-    var action = parseAction_(body);
-    Logger.log('%s: %s (%s)', sender.name, action, payload.messageId);
+  if (isIgnorableSubject(subject, CONFIG.behavior.ignorableSubjectKeywords)) {
     thread.addLabel(processedLabel);
-    if (action === 'new' || action === 'corrected') {
-      stats.forwarded++;
-    } else {
-      stats.skipped++;
-    }
+    thread.moveToTrash();
+    stats.ignored++;
     return;
   }
 
-  if (code >= 400 && code < 500) {
-    // Permanent: retrying forever would just burn quota every 30 minutes.
-    Logger.log('%s: permanent failure %s - %s', sender.name, code, body);
+  var year = receivedAt.getFullYear();
+  var month = receivedAt.getMonth() + 1;
+  var dedupKey = buildDedupKey(billerIdFromName(sender.name), year, month);
+
+  if (ledgerHasDedupKey_(dedupKey)) {
+    thread.addLabel(processedLabel);
+    thread.moveToTrash();
+    stats.duplicate++;
+    return;
+  }
+
+  var extraction = extractAmount_(subject, bodyText);
+  if (!extraction) {
     thread.addLabel(errorLabel);
+    Logger.log(
+      "Could not extract an amount for %s (thread %s)",
+      sender.name,
+      thread.getId()
+    );
     stats.errored++;
     return;
   }
 
-  // 5xx and anything unexpected: leave unlabeled so the next run retries.
-  Logger.log('%s: retryable failure %s - %s', sender.name, code, body);
-  stats.retryLater++;
+  var monthLabel = Utilities.formatDate(
+    receivedAt,
+    CONFIG.timezone || Session.getScriptTimeZone(),
+    "MM-yyyy"
+  );
+  var split = buildSplit(CONFIG.payee.share, CONFIG.roommates, extraction.amountCents);
+
+  var rows = split.rows.map(function (row) {
+    var note = sender.name + " split " + monthLabel;
+    return {
+      dedupKey: dedupKey,
+      biller: sender.name,
+      month: monthLabel,
+      totalCents: extraction.amountCents,
+      label: row.label,
+      amountCents: row.amountCents,
+      venmoLink: buildPayLink(CONFIG.payee.venmoUsername, row.amountCents, note),
+      threadId: thread.getId(),
+      confidence: extraction.confidence,
+    };
+  });
+
+  appendLedgerRows_(rows);
+  postDiscordNotification_(
+    sender.name,
+    monthLabel,
+    formatCents_(extraction.amountCents),
+    rows,
+    extraction.confidence
+  );
+
+  thread.addLabel(processedLabel);
+  thread.moveToTrash();
+  stats.processed++;
 }
 
-function parseAction_(body) {
-  try {
-    return JSON.parse(body).action || 'unknown';
-  } catch (err) {
-    return 'unknown';
+// Regex keyphrase match first; Gemini only runs when that fails. Biller name and
+// month don't need Gemini - biller comes from the sender config that matched, month
+// comes from when the email arrived.
+function extractAmount_(subject, bodyText) {
+  var text = subject + "\n" + bodyText;
+
+  var byKeyphrase = extractAmountCentsByKeyphrase(text);
+  if (byKeyphrase !== null) {
+    return { amountCents: byKeyphrase, confidence: "high" };
   }
+
+  var geminiAmountCents = callGeminiForAmount_(text);
+  if (geminiAmountCents === null) {
+    return null;
+  }
+
+  // Gemini's answer is only trusted at "high" confidence if it also appears
+  // literally in the email text - guards against a reconstructed/estimated total.
+  var confidence = amountAppears(text, geminiAmountCents) ? "high" : "low";
+  return { amountCents: geminiAmountCents, confidence: confidence };
+}
+
+function formatCents_(cents) {
+  return "$" + (cents / 100).toFixed(2);
+}
+
+function lookbackDays_() {
+  var override = PropertiesService.getScriptProperties().getProperty("LOOKBACK_DAYS");
+  var parsed = parseInt(override, 10);
+  return parsed > 0 ? parsed : DEFAULT_LOOKBACK_DAYS;
 }
 
 function getOrCreateLabel_(name) {
@@ -140,28 +171,104 @@ function setupTrigger() {
       ScriptApp.deleteTrigger(trigger);
     });
 
-  ScriptApp.newTrigger(TRIGGER_HANDLER)
-    .timeBased()
-    .everyMinutes(TRIGGER_MINUTES)
-    .create();
+  ScriptApp.newTrigger(TRIGGER_HANDLER).timeBased().everyMinutes(TRIGGER_MINUTES).create();
 
-  Logger.log(
-    'Installed a %s-minute trigger for %s().',
-    TRIGGER_MINUTES,
-    TRIGGER_HANDLER
-  );
+  Logger.log("Installed a %s-minute trigger for %s().", TRIGGER_MINUTES, TRIGGER_HANDLER);
 }
 
 /**
- * Check the wiring without touching Gmail.
- *
- * Run this first after deploying: it proves the URL and secret are right, which
- * is the step most likely to be wrong.
+ * Check the config and secrets without touching Gmail. Run this first after
+ * pushing: it proves Config.gs and the Script Properties are set correctly.
  */
 function testConnection() {
-  var senders = fetchSenders();
-  Logger.log('Connected. %s sender(s) configured:', senders.length);
-  senders.forEach(function (sender) {
-    Logger.log('  %s <%s>', sender.name, sender.fromAddress);
+  Logger.log("Payee: %s (share %s, Venmo @%s)",
+    CONFIG.payee.label, CONFIG.payee.share, CONFIG.payee.venmoUsername);
+  Logger.log("Roommates: %s", CONFIG.roommates.map(function (r) {
+    return r.label + " (share " + r.share + ")";
+  }).join(", "));
+  Logger.log("Senders: %s", CONFIG.senders.map(function (s) { return s.name; }).join(", "));
+
+  var props = PropertiesService.getScriptProperties();
+  ["GEMINI_API_KEY", "DISCORD_WEBHOOK_URL"].forEach(function (name) {
+    Logger.log("%s: %s", name, props.getProperty(name) ? "set" : "MISSING");
+  });
+}
+
+/**
+ * Report what processNewBills() would pick up, without doing any of it. Sends
+ * nothing to Gemini or Discord and applies no labels, so it's safe to run
+ * repeatedly while you work out the right LOOKBACK_DAYS.
+ */
+function scanInbox() {
+  var lookback = lookbackDays_();
+  Logger.log(
+    "Dry scan: %s sender(s), last %s day(s). Nothing will be sent or labeled.",
+    CONFIG.senders.length,
+    lookback
+  );
+
+  var total = 0;
+  var alreadyDone = 0;
+
+  CONFIG.senders.forEach(function (sender) {
+    var query = "from:" + sender.fromAddress + " newer_than:" + lookback + "d";
+    var threads = GmailApp.search(query);
+    Logger.log("");
+    Logger.log("%s <%s>: %s thread(s)", sender.name, sender.fromAddress, threads.length);
+
+    threads.forEach(function (thread) {
+      var messages = thread.getMessages();
+      var message = messages[messages.length - 1];
+      var done =
+        hasLabel_(thread, CONFIG.behavior.processedLabel) ||
+        hasLabel_(thread, CONFIG.behavior.errorLabel);
+      if (done) {
+        alreadyDone++;
+      } else {
+        total++;
+      }
+      Logger.log(
+        "  %s  %s  \"%s\"%s",
+        done ? "[done]" : "[new] ",
+        Utilities.formatDate(message.getDate(), Session.getScriptTimeZone(), "yyyy-MM-dd"),
+        message.getSubject(),
+        done ? " (already labeled, would be skipped)" : ""
+      );
+    });
+  });
+
+  Logger.log("");
+  Logger.log(
+    "Would process %s new thread(s); %s already labeled and skipped.",
+    total,
+    alreadyDone
+  );
+  if (total === 0 && alreadyDone === 0) {
+    Logger.log(
+      "Nothing matched. Either widen the window (set a LOOKBACK_DAYS Script " +
+        "Property) or check that your senders in Config.gs match the actual From " +
+        "addresses on your bills."
+    );
+  }
+}
+
+/**
+ * Remove bill-bot labels from every thread it has touched. Useful during a smoke
+ * test: labels are one of the two things that stop an email being reprocessed, so
+ * clearing them lets you run again. The other is the dedup row in the Ledger sheet -
+ * delete the row by hand if you need to replay an email.
+ */
+function clearLabels() {
+  [CONFIG.behavior.processedLabel, CONFIG.behavior.errorLabel].forEach(function (name) {
+    var label = GmailApp.getUserLabelByName(name);
+    if (!label) {
+      Logger.log("%s: no such label", name);
+      return;
+    }
+    var threads = label.getThreads();
+    threads.forEach(function (thread) {
+      thread.removeLabel(label);
+    });
+    Logger.log("%s: cleared from %s thread(s)", name, threads.length);
   });
 }

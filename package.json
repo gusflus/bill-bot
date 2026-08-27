@@ -1,16 +1,14 @@
 {
   "name": "bill-bot",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Watches Gmail for utility bill emails, splits each bill among roommates by weight, and texts everyone their share. Infrastructure and bill processing are Python on AWS (CDK + Lambda + Bedrock); the Gmail watcher is Apps Script because the platform requires JS.",
+  "description": "A single Google Apps Script project that watches Gmail for utility bill emails, splits each bill among roommates by configurable weight, and posts a Discord notification with per-roommate Venmo links. Payment tracking and dedup live in an auto-created Google Sheet.",
   "scripts": {
-    "synth": "cdk synth",
-    "deploy": "cdk deploy",
-    "diff": "cdk diff",
-    "push": "clasp push"
+    "push": "clasp push",
+    "test": "node --test tests/*.test.js",
+    "preview": "node dev/preview.js"
   },
   "devDependencies": {
-    "@google/clasp": "^2.4.2",
-    "aws-cdk": "^2.1138.0"
+    "@google/clasp": "^2.4.2"
   }
 }

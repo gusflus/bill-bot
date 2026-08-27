@@ -1,24 +1,9 @@
 node_modules/
 .clasp.json
 *.log
-__pycache__/
-*.pyc
-.venv/
-.pytest_cache/
 .DS_Store
 
-# CDK build output
-cdk.out/
-.cdk.staging/
-cdk.context.json
-outputs.json
-
-# Your household's settings - phone numbers, Venmo handle, bill senders.
-# See config.example.yaml.
+# Your household's settings - Venmo handle, roommate list, bill senders.
+# See src/Config.example.gs.
+src/Config.gs
 config.yaml
-
-# Legacy: the Google Cloud OAuth client and token the retired setup wizard
-# needed. Nothing reads these any more. Still ignored so they can't be committed
-# before you delete them - see "If you used an earlier version" in the README.
-credentials.json
-.setup-token.json
