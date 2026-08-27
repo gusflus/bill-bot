@@ -2,7 +2,7 @@
  * bill-bot - a single self-contained Google Apps Script project.
  *
  * Scans Gmail for configured bill senders, extracts the total (regex keyphrase
- * match first, Gemini 2.5 Flash as a fallback for senders regex doesn't recognize),
+ * match first, Gemini 3.6 Flash as a fallback for senders regex doesn't recognize),
  * splits it by configured share weight, records the split in a Google Sheet ledger
  * (which also serves as the dedup record), posts a Discord notification, and trashes
  * the thread.
@@ -42,7 +42,7 @@ function processNewBills() {
     stats.processed,
     stats.duplicate,
     stats.ignored,
-    stats.errored
+    stats.errored,
   );
 }
 
@@ -77,7 +77,7 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
     Logger.log(
       "Could not extract an amount for %s (thread %s)",
       sender.name,
-      thread.getId()
+      thread.getId(),
     );
     stats.errored++;
     return;
@@ -86,12 +86,16 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
   var monthLabel = Utilities.formatDate(
     receivedAt,
     CONFIG.timezone || Session.getScriptTimeZone(),
-    "MM-yyyy"
+    "MM-yyyy",
   );
-  var split = buildSplit(CONFIG.payee.share, CONFIG.roommates, extraction.amountCents);
+  var split = buildSplit(
+    CONFIG.payee.share,
+    CONFIG.roommates,
+    extraction.amountCents,
+  );
 
+  var note = sender.name + " split " + monthLabel;
   var rows = split.rows.map(function (row) {
-    var note = sender.name + " split " + monthLabel;
     return {
       dedupKey: dedupKey,
       biller: sender.name,
@@ -99,19 +103,25 @@ function handleThread_(thread, sender, processedLabel, errorLabel, stats) {
       totalCents: extraction.amountCents,
       label: row.label,
       amountCents: row.amountCents,
-      venmoLink: buildPayLink(CONFIG.payee.venmoUsername, row.amountCents, note),
+      venmoLink: buildPayLink(
+        CONFIG.payee.venmoUsername,
+        row.amountCents,
+        note,
+      ),
       threadId: thread.getId(),
       confidence: extraction.confidence,
     };
   });
 
   appendLedgerRows_(rows);
+  var genericVenmoLink = buildGenericPayLink(CONFIG.payee.venmoUsername, note);
   postDiscordNotification_(
     sender.name,
     monthLabel,
     formatCents_(extraction.amountCents),
     rows,
-    extraction.confidence
+    genericVenmoLink,
+    extraction.confidence,
   );
 
   thread.addLabel(processedLabel);
@@ -146,7 +156,8 @@ function formatCents_(cents) {
 }
 
 function lookbackDays_() {
-  var override = PropertiesService.getScriptProperties().getProperty("LOOKBACK_DAYS");
+  var override =
+    PropertiesService.getScriptProperties().getProperty("LOOKBACK_DAYS");
   var parsed = parseInt(override, 10);
   return parsed > 0 ? parsed : DEFAULT_LOOKBACK_DAYS;
 }
@@ -171,9 +182,16 @@ function setupTrigger() {
       ScriptApp.deleteTrigger(trigger);
     });
 
-  ScriptApp.newTrigger(TRIGGER_HANDLER).timeBased().everyMinutes(TRIGGER_MINUTES).create();
+  ScriptApp.newTrigger(TRIGGER_HANDLER)
+    .timeBased()
+    .everyMinutes(TRIGGER_MINUTES)
+    .create();
 
-  Logger.log("Installed a %s-minute trigger for %s().", TRIGGER_MINUTES, TRIGGER_HANDLER);
+  Logger.log(
+    "Installed a %s-minute trigger for %s().",
+    TRIGGER_MINUTES,
+    TRIGGER_HANDLER,
+  );
 }
 
 /**
@@ -181,19 +199,43 @@ function setupTrigger() {
  * pushing: it proves Config.gs is set up correctly.
  */
 function testConnection() {
-  Logger.log("Payee: %s (share %s, Venmo @%s)",
-    CONFIG.payee.label, CONFIG.payee.share, CONFIG.payee.venmoUsername);
-  Logger.log("Roommates: %s", CONFIG.roommates.map(function (r) {
-    return r.label + " (share " + r.share + ")";
-  }).join(", "));
-  Logger.log("Senders: %s", CONFIG.senders.map(function (s) { return s.name; }).join(", "));
+  Logger.log(
+    "Payee: %s (share %s, Venmo @%s)",
+    CONFIG.payee.label,
+    CONFIG.payee.share,
+    CONFIG.payee.venmoUsername,
+  );
+  Logger.log(
+    "Roommates: %s",
+    CONFIG.roommates
+      .map(function (r) {
+        return r.label + " (share " + r.share + ")";
+      })
+      .join(", "),
+  );
+  Logger.log(
+    "Senders: %s",
+    CONFIG.senders
+      .map(function (s) {
+        return s.name;
+      })
+      .join(", "),
+  );
 
   var props = PropertiesService.getScriptProperties();
   var secretSources = {
-    "Gemini API key": (CONFIG.secrets && CONFIG.secrets.geminiApiKey) ? "Config.gs" :
-      (props.getProperty("GEMINI_API_KEY") ? "Script Property" : null),
-    "Discord webhook URL": (CONFIG.secrets && CONFIG.secrets.discordWebhookUrl) ? "Config.gs" :
-      (props.getProperty("DISCORD_WEBHOOK_URL") ? "Script Property" : null),
+    "Gemini API key":
+      CONFIG.secrets && CONFIG.secrets.geminiApiKey
+        ? "Config.gs"
+        : props.getProperty("GEMINI_API_KEY")
+          ? "Script Property"
+          : null,
+    "Discord webhook URL":
+      CONFIG.secrets && CONFIG.secrets.discordWebhookUrl
+        ? "Config.gs"
+        : props.getProperty("DISCORD_WEBHOOK_URL")
+          ? "Script Property"
+          : null,
   };
   Object.keys(secretSources).forEach(function (name) {
     Logger.log("%s: %s", name, secretSources[name] || "MISSING");
@@ -210,7 +252,7 @@ function scanInbox() {
   Logger.log(
     "Dry scan: %s sender(s), last %s day(s). Nothing will be sent or labeled.",
     CONFIG.senders.length,
-    lookback
+    lookback,
   );
 
   var total = 0;
@@ -220,25 +262,45 @@ function scanInbox() {
     var query = "from:" + sender.fromAddress + " newer_than:" + lookback + "d";
     var threads = GmailApp.search(query);
     Logger.log("");
-    Logger.log("%s <%s>: %s thread(s)", sender.name, sender.fromAddress, threads.length);
+    Logger.log(
+      "%s <%s>: %s thread(s)",
+      sender.name,
+      sender.fromAddress,
+      threads.length,
+    );
 
     threads.forEach(function (thread) {
       var messages = thread.getMessages();
       var message = messages[messages.length - 1];
-      var done =
-        hasLabel_(thread, CONFIG.behavior.processedLabel) ||
-        hasLabel_(thread, CONFIG.behavior.errorLabel);
+      var errored = hasLabel_(thread, CONFIG.behavior.errorLabel);
+      var processed = hasLabel_(thread, CONFIG.behavior.processedLabel);
+      var done = processed || errored;
       if (done) {
         alreadyDone++;
       } else {
         total++;
       }
+      var tag = "[new] ";
+      var note = "";
+      if (errored) {
+        tag = "[error]";
+        note =
+          " (extraction failed last time - still in your inbox, no ledger row." +
+          " Fix the cause, then clearLabels() to retry)";
+      } else if (processed) {
+        tag = "[done] ";
+        note = " (already processed and trashed)";
+      }
       Logger.log(
-        "  %s  %s  \"%s\"%s",
-        done ? "[done]" : "[new] ",
-        Utilities.formatDate(message.getDate(), Session.getScriptTimeZone(), "yyyy-MM-dd"),
+        '  %s  %s  "%s"%s',
+        tag,
+        Utilities.formatDate(
+          message.getDate(),
+          Session.getScriptTimeZone(),
+          "yyyy-MM-dd",
+        ),
         message.getSubject(),
-        done ? " (already labeled, would be skipped)" : ""
+        note,
       );
     });
   });
@@ -247,13 +309,13 @@ function scanInbox() {
   Logger.log(
     "Would process %s new thread(s); %s already labeled and skipped.",
     total,
-    alreadyDone
+    alreadyDone,
   );
   if (total === 0 && alreadyDone === 0) {
     Logger.log(
       "Nothing matched. Either widen the window (set a LOOKBACK_DAYS Script " +
         "Property) or check that your senders in Config.gs match the actual From " +
-        "addresses on your bills."
+        "addresses on your bills.",
     );
   }
 }
@@ -265,16 +327,18 @@ function scanInbox() {
  * delete the row by hand if you need to replay an email.
  */
 function clearLabels() {
-  [CONFIG.behavior.processedLabel, CONFIG.behavior.errorLabel].forEach(function (name) {
-    var label = GmailApp.getUserLabelByName(name);
-    if (!label) {
-      Logger.log("%s: no such label", name);
-      return;
-    }
-    var threads = label.getThreads();
-    threads.forEach(function (thread) {
-      thread.removeLabel(label);
-    });
-    Logger.log("%s: cleared from %s thread(s)", name, threads.length);
-  });
+  [CONFIG.behavior.processedLabel, CONFIG.behavior.errorLabel].forEach(
+    function (name) {
+      var label = GmailApp.getUserLabelByName(name);
+      if (!label) {
+        Logger.log("%s: no such label", name);
+        return;
+      }
+      var threads = label.getThreads();
+      threads.forEach(function (thread) {
+        thread.removeLabel(label);
+      });
+      Logger.log("%s: cleared from %s thread(s)", name, threads.length);
+    },
+  );
 }
