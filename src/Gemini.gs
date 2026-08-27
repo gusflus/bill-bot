@@ -8,13 +8,13 @@ function callGeminiForAmount_(text) {
   if (!apiKey) {
     Logger.log(
       "No Gemini API key set (CONFIG.secrets.geminiApiKey or GEMINI_API_KEY " +
-        "Script Property); cannot fall back to Gemini extraction."
+        "Script Property); cannot fall back to Gemini extraction.",
     );
     return null;
   }
 
   var url =
-    "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" +
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=" +
     encodeURIComponent(apiKey);
 
   var payload = {
@@ -27,7 +27,8 @@ function callGeminiForAmount_(text) {
               "must pay now, as a plain number of dollars and cents (e.g. 142.53). Do " +
               "not calculate, estimate, or guess - copy the figure as printed. If " +
               "several figures appear, choose the total due now, not a previous " +
-              "balance, a minimum payment, or a late fee.\n\nEmail:\n\n" + text,
+              "balance, a minimum payment, or a late fee.\n\nEmail:\n\n" +
+              text,
           },
         ],
       },
@@ -56,7 +57,11 @@ function callGeminiForAmount_(text) {
   }
 
   if (response.getResponseCode() !== 200) {
-    Logger.log("Gemini returned HTTP %s: %s", response.getResponseCode(), response.getContentText());
+    Logger.log(
+      "Gemini returned HTTP %s: %s",
+      response.getResponseCode(),
+      response.getContentText(),
+    );
     return null;
   }
 
