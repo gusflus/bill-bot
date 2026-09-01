@@ -6,3 +6,5 @@ node_modules/
 # Your household's settings - Venmo handle, roommate list, bill senders.
 # See src/Config.example.gs.
 src/Config.gs
+*.md
+!README.md
