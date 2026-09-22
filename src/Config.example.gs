@@ -55,11 +55,29 @@ var CONFIG = {
     { label: "Jo", share: 1 },
   ],
 
-  // The bill senders to watch. 'fromAddress' is matched by Gmail search, so a bare
-  // domain works and catches every address at that domain.
+  // The bill senders to watch. Each entry needs 'fromAddress', 'subject', or both -
+  // whatever's given is AND'd together in the Gmail search.
+  //
+  // 'fromAddress' is matched by Gmail search, so a bare domain works and catches
+  // every address at that domain.
+  //
+  // 'subject' matches subjects containing that exact phrase (Gmail's quoted-phrase
+  // search - not a full-subject match, so a trailing "." or a per-month suffix in the
+  // real subject is fine to leave off). Useful on its own when a biller's From
+  // address isn't stable or is shared with unrelated mail (e.g. a payment
+  // processor), or alongside 'fromAddress' to narrow a noisy sender down to just its
+  // bill-ready emails.
   senders: [
-    { name: "PG&E", fromAddress: "billpay.pge.com" },
-    { name: "Spectrum", fromAddress: "spectrumemails.com" },
+    {
+      name: "PG&E",
+      fromAddress: "billpay.pge.com",
+      subject: "Your PG&E Energy Statement is Ready to View",
+    },
+    {
+      name: "Spectrum",
+      fromAddress: "spectrumemails.com",
+      subject: "Your Spectrum Statement is Ready",
+    },
   ],
 
   behavior: {

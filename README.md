@@ -20,8 +20,9 @@ Watches Gmail for utility bill emails and automatically splits them among your r
    cp src/Config.example.gs src/Config.gs
    ```
 
-   Edit `src/Config.gs` with your roommates, share weights, Venmo handle, bill sender
-   addresses, and your Gemini API key + Discord webhook URL (in the `secrets` block at
+   Edit `src/Config.gs` with your roommates, share weights, Venmo handle, bill senders
+   (a From address, a subject line, or both — see the comments in `Config.example.gs`),
+   and your Gemini API key + Discord webhook URL (in the `secrets` block at
    the top). `Config.gs` is gitignored, so none of this leaves your machine — just
    don't paste the file's contents somewhere public. Leave a secret blank to fall back
    to a `GEMINI_API_KEY` / `DISCORD_WEBHOOK_URL` Script Property instead, if you'd

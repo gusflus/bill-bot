@@ -23,7 +23,7 @@ function processNewBills() {
   var stats = { processed: 0, duplicate: 0, ignored: 0, errored: 0, retryLater: 0 };
 
   CONFIG.senders.forEach(function (sender) {
-    var query = "from:" + sender.fromAddress + " newer_than:" + lookback + "d";
+    var query = buildSenderQuery(sender, lookback);
     var threads = GmailApp.search(query);
 
     threads.forEach(function (thread) {
@@ -248,7 +248,7 @@ function testConnection() {
     "Senders: %s",
     CONFIG.senders
       .map(function (s) {
-        return s.name;
+        return s.name + " [" + buildSenderQuery(s, lookbackDays_()) + "]";
       })
       .join(", "),
   );
@@ -290,15 +290,10 @@ function scanInbox() {
   var alreadyDone = 0;
 
   CONFIG.senders.forEach(function (sender) {
-    var query = "from:" + sender.fromAddress + " newer_than:" + lookback + "d";
+    var query = buildSenderQuery(sender, lookback);
     var threads = GmailApp.search(query);
     Logger.log("");
-    Logger.log(
-      "%s <%s>: %s thread(s)",
-      sender.name,
-      sender.fromAddress,
-      threads.length,
-    );
+    Logger.log("%s [%s]: %s thread(s)", sender.name, query, threads.length);
 
     threads.forEach(function (thread) {
       var messages = thread.getMessages();
@@ -346,7 +341,7 @@ function scanInbox() {
     Logger.log(
       "Nothing matched. Either widen the window (set a LOOKBACK_DAYS Script " +
         "Property) or check that your senders in Config.gs match the actual From " +
-        "addresses on your bills.",
+        "addresses and/or subject lines on your bills.",
     );
   }
 }
